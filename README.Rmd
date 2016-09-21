@@ -27,7 +27,8 @@ Uruchamamiamy instalator i przechodzimy przez kolejne etapy klikając "OK" lub "
 Uruchamiamy program RStudio i w panel po lewej stronie okna programu, zawierający konsolę R wpisujemy (wklejamy) polecenia:
 
 ```{r, eval = FALSE}
-install.packages(c("devtools", "mirt", "mvtnorm", "knitr", "rmarkdown"))
+install.packages(c("devtools", "mirt", "mvtnorm", "knitr", "rmarkdown", "psych",
+                   "ggplot2"))
 devtools::install_github('tzoltak/KTT')
 ```
 

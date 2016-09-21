@@ -27,7 +27,8 @@ Uruchamamiamy instalator i przechodzimy przez kolejne etapy klikając "OK" lub "
 Uruchamiamy program RStudio i w panel po lewej stronie okna programu, zawierający konsolę R wpisujemy (wklejamy) polecenia:
 
 ```{r, eval = FALSE}
-install.packages(c("devtools", "mirt"))
+install.packages(c("devtools", "mirt", "mvtnorm", "knitr", "rmarkdown"))
+devtools::install_github('tzoltak/KTT')
 ```
 
 Możemy przy tym otrzymać komnikat, że R utworzy folder z biblioteką pobranych pakietów, w folderze domowym użytkownika (akceptujemy to).

@@ -131,7 +131,8 @@ Loading required package: lattice
 &gt; library(KTT)
 &gt; library(mvtnorm)
 &gt; 
-&gt; daneZapunktowane = przypisz_punktacje(daneSpr2005, opisTestuSpr2005, verbose = FALSE)
+&gt; daneZapunktowane = przypisz_punktacje(daneSpr2005, opisTestuSpr2005,
++                                       verbose = FALSE)
 &gt; parametry_zadan(daneZapunktowane)
 Parametry zadań:
 
@@ -1064,7 +1065,46 @@ $Z25_6
 +   return(pdif)
 + }
 &gt; 
-&gt; PDIF(mg_configural, &quot;m&quot;)</code></pre>
+&gt; data.frame(zadanie = names(daneZapunktowane),
++            PDIF = round(PDIF(mg_configural, &quot;m&quot;), 2))
+   zadanie  PDIF
+1       Z1 -0.01
+2       Z2  0.02
+3       Z3 -0.04
+4       Z4 -0.04
+5       Z5 -0.03
+6       Z6 -0.08
+7       Z7  0.10
+8       Z8  0.01
+9       Z9 -0.01
+10     Z10 -0.02
+11     Z11  0.05
+12     Z12 -0.02
+13     Z13 -0.02
+14     Z14  0.04
+15     Z15 -0.01
+16     Z16  0.00
+17     Z17  0.00
+18     Z18 -0.03
+19     Z19  0.01
+20     Z20  0.04
+21   Z21_1 -0.14
+22   Z21_2 -0.15
+23   Z21_3 -0.07
+24     Z22 -0.01
+25   Z23_1 -0.13
+26   Z23_2 -0.02
+27   Z23_3 -0.10
+28   Z23_4 -0.14
+29   Z23_5 -0.10
+30     Z24 -0.01
+31   Z25_1 -0.03
+32   Z25_2  0.00
+33   Z25_3 -0.04
+34   Z25_4 -0.06
+35   Z25_5 -0.16
+36   Z25_6 -0.08
+37     Z26 -0.14</code></pre>
 <p>Ćwiczenie 5: Prosimy o zinterpretowanie wielkości efektów dla zadań zidentyfikowanych wcześniej jako posiadające DIF. Ile zadań można zaklasyfikować do kategorii A, B i C. Które to sa zadania?</p>
 </div>
 

@@ -14,7 +14,8 @@ library(mirt)
 library(KTT)
 library(mvtnorm)
 
-daneZapunktowane = przypisz_punktacje(daneSpr2005, opisTestuSpr2005, verbose = FALSE)
+daneZapunktowane = przypisz_punktacje(daneSpr2005, opisTestuSpr2005,
+                                      verbose = FALSE)
 parametry_zadan(daneZapunktowane)
 ```
 
@@ -220,7 +221,8 @@ PDIF = function(x, grOgniskowa, emp = TRUE) {
   return(pdif)
 }
 
-PDIF(mg_configural, "m")
+data.frame(zadanie = names(daneZapunktowane),
+           PDIF = round(PDIF(mg_configural, "m"), 2))
 ```
 
 Ćwiczenie 5: Prosimy o zinterpretowanie wielkości efektów dla zadań zidentyfikowanych wcześniej jako posiadające DIF. Ile zadań można zaklasyfikować do kategorii A, B i C. Które to sa zadania? 

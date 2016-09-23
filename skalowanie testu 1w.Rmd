@@ -1,0 +1,280 @@
+---
+title: "Skalowanie i diagnostyka IRT modelu jednowymiarowego"
+author: "Karolina Świst, Tomasz Żółtak"
+date: "23 września 2016"
+output: html_document
+---
+
+# Skalowanie wzrostu
+
+Dane, których będziemy używać pochodzą z ankiety (internetowej) przeprowadzonej wśród uczestników trzeciego *Spotkania Entuzjastów R*, które odbyło się w Warszawie 24 kwietnia 2014 r. 43 respondentów udzieliło odpowiedzi *tak* lub *nie* na 12 pytań, związanych z funkcjonowaniem w codziennym życiu w sytuacjach, w których wzrost bywa istotny. Poza tym poproszono ich o podanie wprost swojego wzrostu.
+
+Zbiór danych zawarty został w pakiecie 'KTT', o zainstalowanie którego byli Państwo proszeni przed warsztatami. Załadowanie pakietu do programu R komendą 'library()' sprawi, że będzie on dostępny do analiz.
+
+```{r comment="", prompt=TRUE, collapse=TRUE}
+library(KTT)
+print(opisTestuWzrost[, -c(2, 4, 6)], right = FALSE)
+summary(daneWzrost)
+```
+
+Jak widać, dane przechowywane są w postaci odpowiedzi, przy czym w zależności od pytania na raczej wyższy wzrost wskazuje albo odpowiedź *tak* albo odpowiedź *nie*. Aby móc je dalej analizować, przekształcimy je na *punkty* przy pomocy funkcji 'przypisz_punktacje()' z pakietu 'KTT', a wynik jej działania przypiszmy do obiektu 'wynikiWzrost'.
+
+```{r comment="", prompt=TRUE, collapse=TRUE}
+wynikiWzrost = przypisz_punktacje(daneWzrost, opisTestuWzrost, verbose = FALSE)
+```
+
+## Zapozananie z testem
+
+Zanim przystąpimy do skalowania IRT, przyjrzyjmy się statystykom KTT zadań, korzystając z funkcji 'parametry_zadan()' (z pakietu 'KTT'). Obliczone parametry przypiszmy do obiektu 'parKTT'.
+
+```{r comment="", prompt=TRUE, collapse=TRUE}
+parKTT = parametry_zadan(wynikiWzrost)
+```
+
+Jak widać, test funkcjonuje nieźle, z wyjątkiem zadania 3. Jak na swoją niewielką długość ma też niezłą rzetelność, przekraczającą 0,70, a po ewentualnym usunięciu zad. 3. nawet 0,75.
+
+## Proste skalowanie z wykorzystaniem pakietu 'mirt'
+
+Do anali IRT w R wykorzystywać będziemy pakiet 'mirt'. Daje on szerokie możliwości estymacji jedno i wielowymiarowych modeli IRT, w tym modeli wielogrupowych i regresji latentnej, a nawet niektórych modeli diagnostycznych (CDM; nimi się jednak dzisiaj nie będziemy zajmować).
+
+Podstawową funkcją służącą do estymacji modeli w ramach pakietu jest 'mirt()'. Jej najprostsze wywołanie wygląda następująco:
+
+```{r eval=FALSE, comment="", prompt=TRUE, collapse=TRUE}
+wyestymowanyModel = mirt(obiektZDanymi, liczbaWymiarow)
+```
+
+Funkcja 'mirt' domyślnie wykorzystuje do skalowania zadań binarnych model 2PL. W naszym przypadku, ze względu na niewielką liczbę obserwacji, daje on jednak niestabilne oszacowania i lepiej byłoby wykorzystać model Rascha. Aby to zrobić możemy skorzystać z jednego z opcjonalnych argumentów funkcji 'mirt()' - 'itemtype'.
+
+Możliwe modele dla zadań binarnych to:
+
+  * "Rasch" - model Rascha,
+  * "2PL" - model dwuparametryczny,
+  * "3PL" - model trzyparametryczny ze *zgadywaniem*,
+  * "3PLu" - model trzyparametryczny, ale z górną, a nie dolną asymptotą,
+  * "4PL" - model czteroparametryczny - z dolną i z górną asymptotą.
+
+```{r comment="", prompt=TRUE, collapse=TRUE}
+library(mirt)
+wzrostRasch = mirt(wynikiWzrost, 1, itemtype = "Rasch")
+wzrost2PL = mirt(wynikiWzrost, 1, verbose = FALSE)
+```
+
+Estymując model 2PL otrzymaliśmy ostrzeżenie, że model pomimo wykonania 500 iteracji nie zbiegł (użyliśmy argumentu 'verbose' ustawionego na FALSE, aby nie zaśmiecać pliku z raporetem statystykami zbieżności dla każdej z tych 500 iteracji). Jest to związane właśnie ze zbyt małą ilością danych (oraz pewnymi problemami z testem).
+
+Dopasowanie do danych dwóch modeli możemy porównać przy pomocy funkcji 'anova':
+
+```{r comment="", prompt=TRUE, collapse=TRUE}
+anova(wzrostRasch, wzrost2PL)
+```
+
+Co prowadzi nas do wniosku, że model 2PL jest istotnie lepiej dopasowany (nawiasem mówiąc, 46 obserwacji to nie za duża grupa jak na test LR). Musimy jednak pamiętać, że przy jego estymacji natrafiliśmy na problemy.
+
+## Parametry zadań
+
+Aby obejrzeć parametry zadań możemy użyć funkcji 'coef'. Domyślnie zwraca ona wyniki w dosyć niewygodnej postaci (w tym w paramaetryzacji wielowymiarowej, innej niż klasyczna, jednowymiarowa parametryzacja IRT), jednak możemy uzyskać taką postać, która będzi bardziej nam odpowiadać, używając argumentów 'IRTpar' i 'simplify':
+
+```{r comment="", prompt=TRUE, collapse=TRUE}
+(wspRasch = coef(wzrostRasch, IRTpar = TRUE, simplify = TRUE))
+(wsp2PL = coef(wzrost2PL, IRTpar = TRUE, simplify = TRUE))
+```
+
+Zwróćmy uwagę, że trudności zadań z modelu Rascha nie jest bezpośrednio porównywalna z tymi z modelu 2PL - różna jest bowiem wariancja konstruktu (parametr 'cov', na dole wydrukowanych statystyk).
+
+W modelu 2PL zwracają uwagę dwa problemy: 1) ujemna dyskryminacja zadania 3., 2) absurdalnie wysoka dyskryminacja zad. 1. Ten drugi problem wiąże się z tym, że ma ono rozkład bliski jednopunktowemu - na 43 osoby tylko jedna wskazała odpowiedź "tak" (choć zauważmy, że rolę odgrywa tu także specyfika powiązań zad. 1. z innymi zadaniami - zadanie 9. ma taki sam rozkład odpowiedzi, ale nie prowadzi to do takiego problemu).
+
+## Skalowanie na zawężonej grupie zadań
+
+Ponieważ widzimy, że problemy sprawiają zadania 1. i 3., spróbujmy wyestymować modele z pominięciem tych dwóch zadań:
+
+```{r comment="", prompt=TRUE, collapse=TRUE}
+wzrostBZRasch = mirt(wynikiWzrost[, -c(1, 3)], 1, itemtype = "Rasch")
+wzrostBZ2PL = mirt(wynikiWzrost[, -c(1, 3)], 1, verbose = FALSE)
+# po ~220 iteracjach zbiega
+
+anova(wzrostBZRasch, wzrostBZ2PL)
+
+(wspBZRasch = coef(wzrostBZRasch, IRTpar = TRUE, simplify = TRUE))
+(wspBZ2PL = coef(wzrostBZ2PL, IRTpar = TRUE, simplify = TRUE))
+```
+
+## Krzywe charakterystyczne i informacyjne
+
+Krzywe charakterystyczne i informacyjne poszczególnych zadań możemy narysować przy pomocy funkcji 'itemplot()':
+
+```{r comment="", prompt=TRUE, collapse=TRUE}
+# krzywa charakterystyczna dla 1. zadania
+itemplot(wzrostBZ2PL, 1, type = "trace")
+# krzywa informacyjna dla 1. zadania
+itemplot(wzrostBZ2PL, 1, type = "info")
+```
+
+### Krzywe charakterystyczne wszystkich zadań
+
+```{r comment="", prompt=TRUE, collapse=TRUE}
+for (i in 1:10) {
+  plot(itemplot(wzrostBZ2PL, i, type = "trace", theta_lim = c(-4, 4)))
+}
+```
+
+## Krzywa informacyjna testu
+
+W pakiecie 'mirt' nie ma funkcji, która rysowałaby wykres krzywej informacyjnej testu, ale istnieje funkcja 'testinfo()', która pozwala obliczyć wartość informacji Fischera. Na podstawie zwróconych przez nią wyników możemy sami narysować krzywą informacyjną.
+
+```{r comment="", prompt=TRUE, collapse=TRUE}
+# wartości cechy, dla których ma zostać obliczona ilość inforacji
+x = seq(-4, 4, 0.1)
+# ilość informacji
+infoBZ2PL = testinfo(wzrostBZ2PL, x)
+# rysowanie
+plot(x, infoBZ2PL, type = "l", main = "Krzywa informacyjna testu",
+     xlab = "cecha ukryta (wzrost)", ylab = "informacja Fischera")
+```
+
+Korzystając z tego, że w danych z badania mamy informacje o wzroście badanych, skalę powyższego wykresu możemy wyrazić w centymetrach.
+
+```{r comment="", prompt=TRUE, collapse=TRUE}
+(sr = mean(daneWzrost$wzrost))
+(odchStd = sd(daneWzrost$wzrost))
+xCm = x * odchStd + sr
+plot(xCm, infoBZ2PL, type = "l", main = "Krzywa informacyjna testu",
+     xlab = "wzrost [cm]", ylab = "informacja Fischera")
+grid(col = grey(0.5))
+```
+
+Na ten sam wykres możemy chcieć nanieść krzywą informacyjną dla modelu Rascha, choć będzie to wymagało dodatkowych obliczeń.
+
+```{r comment="", prompt=TRUE, collapse=TRUE}
+# wartości cechy, dla których ma zostać obliczona ilość inforacji
+xR = x * wspBZRasch$cov^0.5
+# ilość informacji
+infoBZRasch = testinfo(wzrostBZRasch, xR) * wspBZRasch$cov
+# krzywe informacyjna
+plot(xCm, infoBZ2PL, type = "l", main = "Krzywa informacyjna testu",
+     xlab = "wzrost [cm]", ylab = "informacja Fischera")
+lines(xCm, infoBZRasch, col = 2, lwd = 2)
+grid(col = grey(0.5))
+legend("topright", legend = c("2PL", "Rasch"), col = 1:2, lwd = 1:2)
+```
+
+Ilość informacji możemy też przeliczyć na wielkość standardowego błędu pomiaru (CSEM).
+
+```{r comment="", prompt=TRUE, collapse=TRUE}
+csemBZ2PL = 1 / infoBZ2PL
+csemBZRasch = 1 / infoBZRasch
+plot(xCm, csemBZ2PL, type = "l", main = "Standardowy błąd pomiaru",
+     xlab = "wzrost [cm]", ylab = "std. błąd pomiaru [cm]",
+     ylim = c(0, 5))
+lines(xCm, csemBZRasch, col = 2, lwd = 2)
+grid(col = grey(0.5))
+legend("topleft", legend = c("2PL", "Rasch"), col = 1:2, lwd = 1:2)
+```
+
+## Estymacja oszacowań wartości mierzonej cechy
+
+Oszacowania wartości mierzonej cechy uzyskujemy przy pomocy funkcji 'fscores()' (jak widać nazwanej w konwencji analizy czynnikowej, nie IRT). Domyślnym typem estymatora jest EAP (Expected A'Posteriori) i przy nim pozostańmy. Argument 'full.scores.SE = TRUE' każe zwrócić również oszacowania błędów standardowych.
+
+```{r comment="", prompt=TRUE, collapse=TRUE}
+oszacBZ2PL = fscores(wzrostBZ2PL, full.scores.SE = TRUE)
+summary(oszacBZ2PL)
+oszacBZRasch = fscores(wzrostBZRasch, full.scores.SE = TRUE)
+summary(oszacBZRasch)
+```
+
+Porównajmy własności oszacowań z modelu Rascha i z modelu 2PL, rysując wykresy rozrzutu. Przy tym, podobnie jak w przypadku krzywej informacyjnej, skorzystamy z tego, że znamy średnią i odchylenie standardowe wzrostu w badanej grupie i przeliczymy oszacowania tak, aby były wyrażone na skali wzrostu.
+
+```{r comment="", prompt=TRUE, collapse=TRUE}
+# suma punktów z testu bez zad. 1. i 3.
+sumaBZ = rowSums(wynikiWzrost[, -c(1, 3)])
+# przeliczamy oszacowania na wzrost w cm
+oszacBZ2PL[, 1] = oszacBZ2PL[, 1] * odchStd + sr
+oszacBZ2PL[, 2] = oszacBZ2PL[, 2] * odchStd
+oszacBZRasch[, 1] = oszacBZRasch[, 1] / wspBZRasch$cov^0.5 * odchStd + sr
+oszacBZRasch[, 2] = oszacBZRasch[, 2] / wspBZRasch$cov^0.5 * odchStd
+# rysowanie
+plot(sumaBZ, oszacBZ2PL[, 1], type = "p", pch = 16, col = 1, cex = 1.2,
+     main = "Suma punktów\na oszacowania wzrostu z modeli IRT",
+     xlab = "suma punktów", ylab = "oszacowania EAP")
+points(sumaBZ, oszacBZRasch[, 1], pch = 16, col = 2, cex = 1.5)
+grid(col = grey(0.5))
+legend("bottomright", legend = c("2PL", "Rasch"), pch = 16, col = 1:2)
+abline(sr - mean(sumaBZ) * odchStd / sd(sumaBZ), odchStd / sd(sumaBZ))
+```
+
+### Jak oszacowania mają się do (deklarowanej) rzeczywistości?
+
+Obliczmy korelacje (liniowe Pearsona) pomiędzy różnymi oszacowaniami wzrostu, a tym, jaki wzrost zadeklarowali respondenci.
+
+```{r comment="", prompt=TRUE, collapse=TRUE}
+kor = cor(daneWzrost$wzrost,
+          data.frame(suma = rowSums(wynikiWzrost),
+                     sumaBZ = sumaBZ,
+                     oszacRashBZ = oszacBZRasch[, 1],
+                     oszac2PLBZ = oszacBZ2PL[, 1]))
+round(kor, 3)
+```
+
+**Przy tak niewielkiej liczbie obserwacji (i krótkim teście)** różnice w wartościach korelacji są niewielkie. Widać też, że chociaż zad. 1. i 3. sprawiały nam problemy w skalowaniu (przy czym zad. 1. głównie z powodu znikomego zróżnicowania rozkładu odpowiedzi - przy większej liczbie badanych problem ten zapewne by zniknął), to ich usunięcie zabiera nieco użytecznej informacji.
+
+# Sprawdzian 2005 - zadania o wielu poziomach wykonania
+
+## Przygotowanie danych
+
+Wyniki sprawdzianu z 2005 r. (ściśle próba 10 tys. zdaących) znajdują się w obiekcie 'daneSpr2005', wczytywanym razem z pakietem 'KTT', a opis struktury testu w obiekcie 'opisTestuSpr2005'. Analogicznie jak w przypadku wyników testu dotyczącego wzrostu musimy zapunktować je korzystając z funkcji 'przypisz_punktacje()'.
+
+```{r comment="", prompt=TRUE, collapse=TRUE}
+spr = przypisz_punktacje(daneSpr2005, opisTestuSpr2005, verbose = FALSE)
+
+parametry_zadan(spr)
+```
+
+## Skalowanie
+
+W teście znajdują się zarówno zadania oceniane binarnie, jak i trzy zadania oceniane na skali 0-1-2. Funkcja 'mirt' do skalowania zadań o wielu poziomach wykonania domyślnie używa modelu SGR (Samejima Graded Response), jednak do diagnostyki własności zadań bardziej użyteczny byłby model GPC (Generalised Partial Credit). Model skalowania możemy przy tym (a nawet musimy, jako że mamy w teście zadania różnych typów) opisać funkcji 'mirt' oddzielnie dla każdego zadania, przekazując jej jako argument 'itemtype' wektor ciągów znaków, którego kolejne elementy opisują model skalowania dla kolejnych zadań.
+
+Możliwe modele dla zadań o wielu poziomach wykonania to:
+
+  * "grgm" - model Rasch Graded Response:
+    * dyskryminacja taka sama dla wszystkich zadań, używany razem z typem "Rasch" dla zadań ocenianych binarnie,
+    * nie dopuszcza zaburzenia kolejności podpunktów ze względu na trudność,
+  * "sgrm" - model Samejima Graded Response:
+    * dyskryminacja estymowana oddzielnie dla każdego zadania,
+    * nie dopuszcza zaburzenia kolejności podpunktów ze względu na trudność,
+  * "rpcm" - model Rasch Partial Credit:
+    * dyskryminacja taka sama dla wszystkich zadań, używany razem z typem "Rasch" dla zadań ocenianych binarnie,
+    * dopuszcza zaburzenia kolejności podpunktów ze względu na trudność,
+  * "gpcm" - model Generalised Partial Credit:
+    * dyskryminacja estymowana oddzielnie dla każdego zadania,
+    * dopuszcza zaburzenia kolejności podpunktów ze względu na trudność.
+
+Poniżej tworzymy wektor opisujący model skalowania dla poszczególnych zadań i skalujemy wykorzystując funkcję 'mirt'.
+
+```{r comment="", prompt=TRUE, collapse=TRUE}
+(modelZad = rep("2PL", ncol(spr)))
+# obiekt utworzony przez funkcję przypisz_punktację ma przypisane pewne
+#   użyteczne właściwości ('attributes')
+attributes(spr)$maks
+# zadaniom, za które można było uzyskać maks. 2 pkt. przypiszmy wartość "gpcm"
+modelZad[attributes(spr)$maks == 2] = "gpcm"
+modelZad
+
+mSpr = mirt(spr, 1, itemptype = modelZad)
+coef(mSpr, IRTpar = TRUE, simplify = TRUE)
+```
+
+## Diagnostyka graficzna
+
+Możemy zauważyć, że w przypadku ostatniego zadania wartość parametru trudności dla przejścia pomiędzy 1 a 2 pkt. jest mniejsza, niż dla przejścia pomiędzy 0 a 1 pkt. Porównajmy przebieg krzywych charakterystycznych dla trzech zadań Sprawdzianu 2005, ocenianych na skali 0-1-2. Dla każdego z nich przyjrzyjmy się też (używając funkcji 'table' i 'prop.table') rozkładowi punktacji.
+
+```{r comment="", prompt=TRUE, collapse=TRUE}
+itemplot(mSpr, 21, type = "trace")
+table(spr$Z21_1)
+prop.table(table(spr$Z21_1))
+itemplot(mSpr, 22, type = "trace")
+table(spr$Z21_2)
+prop.table(table(spr$Z21_2))
+itemplot(mSpr, 37, type = "trace")
+table(spr$Z26)
+prop.table(table(spr$Z26))
+```
+
+Jak widać, w zad. 26. środkowa pozycja skali oceny jest bardzo rzadko wykorzystywana. Gdyby chcieć je wykorzystywać w przyszłości w innych testach, należałoby przemyśleć zmianę klucza kodowania.

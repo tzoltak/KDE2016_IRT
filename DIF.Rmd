@@ -1,0 +1,226 @@
+---
+title: "Zróżnicowane funkcjonowanie pozycji testowych (DIF)"
+author: "Karolina Świst, Tomasz Żółtak"
+date: "23 września 2016"
+output: html_document
+---
+
+# 1. Wczytywanie danych
+
+Dane, których będziemy używać w analizach to próba 10 tys. uczniów spośród zdających Sprawdzian w 2005 r. Zbiór danych zostały włączone do pakietu 'KTT', o zainstalowanie którego byli Państwo proszeni. Załadowanie tego pakietu spowoduje, że staną się one dostępne, przy czym konieczne jest jeszcze zapunktowanie zadań zamkniętych, których wyniki przechowywane są w postaci informacji o tym, którą odpowiedź wybrał zdający. Oprócz pakietu 'KTT' musimy też załadować pakiet 'mirt', umożliwiający estymację modeli IRT, w tym analizę zróżnicowanego funkcjonowania pozycji testowych oraz pakiet 'mvtnorm' niezbędny do przeliczenia wielkości efektów DIF.
+
+```{r comment="", prompt=TRUE, collapse=TRUE}
+library(mirt)
+library(KTT)
+library(mvtnorm)
+
+daneZapunktowane = przypisz_punktacje(daneSpr2005, opisTestuSpr2005, verbose = FALSE)
+parametry_zadan(daneZapunktowane)
+```
+
+Przy okazji porównajmy parametry dla wyniku sumarycznego w grupie chłopców i dziewcząt
+```{r comment="", prompt=TRUE, collapse=TRUE}
+library(psych)
+library(ggplot2)
+daneZapunktowane$suma = rowSums(daneZapunktowane)
+describeBy(daneZapunktowane$suma, daneSpr2005$plec)
+ggplot(daneZapunktowane, aes(x=suma, fill = daneSpr2005$plec)) + geom_histogram(binwidth=0.5, position = "dodge")
+```
+
+ĆWICZENIE 1: Co można (wstępnie) powiedzieć o surowych wynikach chłopców i dziewcząt ze sprawdzianu 2005?
+# 2. Estymacja modeli
+(najpierw wyrzucimy sumę punktów z naszych danych)
+
+```{r comment="", prompt=TRUE, collapse=TRUE}
+daneZapunktowane$suma = NULL
+```
+
+Aby zbadać, czy zachodzi zróżnicowane funkcjonowanie zadań ze względu na płeć, musimy wyestymować model zakładający pełną inwariancję oraz modele, dopuszczające takie zróżnicowanie (różne jego formy), a następnie je ze sobą porównać. Odpowiedzi na zadania będziemy modelować modelem 2PL w przypadku zadań ocenianych binarnie i GPCM dla zadań o większej liczbie poziomów wykonania.
+
+Do estymacji modeli wielogrupowych, umożliwiających badanie DIF będziemy używać funkcji **multipleGroup** z pakietu 'mirt' (domyślnie zakłada ona model 2PL/GPCM, choć w razie potrzeby można to zmienić).
+
+```{r eval=FALSE, comment="", prompt=FALSE, collapse=FALSE}
+multipleGroup(dane, opis_modelu, group = wektor_opisujacy_przydzial_do_grup,
+              invariance = wektor_tekstowy_opisujacy_roznice_miedzy_grupami)
+```
+
+Domyślnie (gdy nie został podany argument 'invariance') estymowany jest model, w którym zakłada się taki sam rozkład mierzonej cechy we wszytkich grupach, ale dopuszcza się zróżnicowanie parametrów zadań pomiędzy grupami. Jeśli chcemy to zmienić, możemy zawrzeć w wektorze przekazywanym jako argument 'invariance' następujące ciągi znaków:
+
+  * 'slopes' - nakłada założenie o równości parametrów dyskryminacji pomiędzy grupami;
+  * 'intercepts' - nakłada założenie o równości parametrów trudności pomiędzy grupami;
+  * 'free_means' - uwalnia średnie pomiędzy modelami;
+  * 'free_var' - uwalnia parametry wariancji pomiędzy grupami.
+
+Spośród estymowanych poniżej modeli:
+
+  * **mg_constrained** zakłada pełną inwariancję pomiarową;
+  * **mg_metric** zakłada inwariancję metryczną (równe parametry dyskryminacji);
+  * ** mg_scalar1** zakłada inwariancję skalarną (równe parametry dyskryminacji i trudności) z uwolnionymi wariancjami
+  * ** mg_scalar2** zakłada inwariancję skalarną (rowne parametry dyskryminacji i trudności) z uwolnionymi średnimi i wariancjami 
+  * **mg_metric** zakłada inwariancję metryczną (równe parametry dyskryminacji);
+  * **mg_configural** zakłada inwariancję konfiguralną (uwolnione parametry dyskryminacji i trudności)
+  * **mg_configural_fg** dopuszcza zarówno zróżnicowanie parametrow zadań pomiędzy grupami, jak też uwalnia parametry rozkładu mierzonej cechy w grupie ogniskowej; w ogólności nie jest to dobry model - czasem (w przypadku niektórych zbiorów danych) może nie dać się go wyestymować (o czym zostaniemy ostrzeżeni przy wywoływaniu funkcji 'multipleGroup'), ale bywa użyteczny do oceny DIF;
+
+
+```{r comment="", prompt=TRUE, collapse=FALSE}
+plec = daneSpr2005$plec
+
+m = mirt(daneZapunktowane, 1)
+
+mg_constrained = multipleGroup(daneZapunktowane, 1, group = plec,
+                               invariance = c('slopes', 'intercepts'))
+
+mg_metric = multipleGroup(daneZapunktowane, 1, group = plec,
+                          invariance = c('slopes'))
+
+mg_configural = multipleGroup(daneZapunktowane, 1, group = plec)
+
+
+mg_configural_fg = multipleGroup(daneZapunktowane, 1, group = plec,
+                                 invariance = c('free_var', 'free_means'))
+
+mg_scalar1 = multipleGroup(daneZapunktowane, 1, group = plec,
+                           invariance = c('slopes', 'intercepts',
+                                          'free_var'))
+
+mg_scalar2 = multipleGroup(daneZapunktowane, 1, group = plec,
+                           invariance = c('slopes', 'intercepts',
+                                          'free_var', 'free_means'))
+```
+
+# 3. Porównanie modeli między sobą
+
+## Porównanie dopasowania modeli do danych
+
+```{r comment="", prompt=TRUE, collapse=TRUE}
+# porownujemy ze soba (modele zagniezdzone)
+anova(mg_constrained, mg_metric)
+
+anova(mg_metric, mg_configural)
+
+# mozna przetestowac tez dalsze hipotezy, choc w naszym wypadku widac juz,
+# ze mamy do czynienia z DIF niejednorodnym
+#anova(mg_scalar2, mg_metric)
+#anova(mg_scalar1, mg_scalar2)
+#anova(mg_constrained, mg_scalar1)
+```
+
+## Ostrzeżenie!
+
+**Uwaga, modeli wyestymowanych funkcją 'mirt' i funkcją 'multipleGroup' nie należy ze sobą porównywać funkcją 'anova'**. Dwa poniższe modele są tożsame, co widać po wartościach statystyk AIC, BIC itp., ale implementacja testu chi-kwadrat daje w tej sytuacji bzdurne rezultaty:
+
+```{r comment="", prompt=TRUE, collapse=TRUE}
+anova(m, mg_constrained)
+```
+
+## Różnice w parametrach rozkładu mierzonej cechy
+
+```{r echo = FALSE, comment="", prompt=TRUE, collapse=TRUE}
+cat("\nModel zakładający inwariancję zadań,\n",
+    "ale uwalniający parametry rozkładu cechy:\n", sep = "")
+print(setNames(data.frame(k = t(coef(mg_scalar2)$k$GroupPars),
+                          m = t(coef(mg_scalar2)$m$GroupPars)),
+               c("k", "m")))
+cat("Model uwalniający wszystkie parametry:\n")
+print(setNames(data.frame(k = t(coef(mg_configural_fg)$k$GroupPars),
+                          m = t(coef(mg_configural_fg)$m$GroupPars)),
+               c("k", "m")))
+```
+
+ĆWICZENIE 2: Co można powiedzieć o parametrach rozkładu umiejętności chłopców i dziewcząt ze sprawdzianu 2005?
+
+# 4. Analiza graficzna
+
+Wskazówek na temat tego, które zadania łamią założenie inwariancji pomiarowej może dostarczyć graficzna analiza różnic w przebiegu funkcji charakterystycznych zadań pomiędzy grupami. Poniżej wykresy dla pierwszych 10 zadań z modelu dopuszczającego zróżnicowania zarówno trudności, jak i dyskryminacji zadań.
+
+```{r comment="", prompt=TRUE, collapse=TRUE}
+itemplot(mg_configural, item = 1)
+itemplot(mg_configural, item = 2)
+itemplot(mg_configural, item = 3)
+itemplot(mg_configural, item = 4)
+itemplot(mg_configural, item = 5)
+itemplot(mg_configural, item = 6)
+itemplot(mg_configural, item = 7)
+itemplot(mg_configural, item = 8)
+itemplot(mg_configural, item = 9)
+itemplot(mg_configural, item = 10)
+```
+
+# 5. Formalny test DIF
+
+Przejdźmy w końcu do testowania DIF - wiemy, że nie mamy zachowanej niezmienniczości metrycznej, spójrzmy jak wygląda to na poziomie poszczególnych zadań. Funkcja 'DIF' wychodzi od modelu bez założonej inwariancji i kolejno testuje, jak na statystyki dopasowania modelu wpływa przyjęcie założenia, że dane zadanie ma takie same parametry w obu grupach (dopuszczając zróżnicowanie parametrów dla wszystkich innych zadań). Funkcja może też narysować wykresy krzywych charakterystycznych dla zadań, w których tak zdefiniowany DIF okazał się statystycznie istotny.
+
+## Model z założonym takim samym rozkładem cechy w grupach
+
+```{r eval = TRUE, comment="", prompt=TRUE, collapse=TRUE}
+resulta1d = DIF(mg_configural, c('a1', 'd'), plotdif = TRUE)
+```
+
+ĆWICZENIE 3: prosimy o interpretację różnic w prawdopodobieństwie uzyskania prawidłowej odpowiedzi w grupach chłopców i dziewcząt. Jakie są różnice we współczynnikach trudności i dyskryminacji 
+
+ĆWICZENIE 4: prosimy o zidentyfikowanie zadań wykazujących DIF przy pomocy arkusza egzaminacyjnego sprawdzianu 2005 (https://www.cke.edu.pl/images/stories/Sprawdzian2005/s-a1-052.pdf). Czy są Państwo w stanie postawić hipotezy na temat tego skąd może wynikać zróżnicowane funkcjonowanie zadań w grupach chłopców i dziewczynek?
+
+
+
+## Model dopuszczający różnice w parametrach rozkładu cechy między grupami
+
+```{r eval = TRUE, comment="", prompt=TRUE, collapse=TRUE}
+resulta2d = DIF(mg_configural_fg, c('a1', 'd'), plotdif = TRUE)
+```
+
+
+```{r eval = TRUE, comment="", collapse=TRUE}
+###### opcjonalnie
+# sprawdzamy czy za DIF odpowiedzialny jest wspolczynnik dyskryminacji
+(a1s = DIF(mg_configural, 'a1', items2test = 1:37))
+# lub wspolczynik trudnosci (dla zadan punktowanych zero-jedynkowo)
+(ds = DIF(mg_configural, 'd', items2test = 1:20))
+(ds = DIF(mg_configural, 'd', items2test = 23:36))
+```
+# 6. Wielkość efektu DIF
+Jak już zostało wcześniej wspomniane - dla dużych zbiorów danych jakimi są egzaminy, wykrycie DIF technikami opierającymi się o istność statystyczną może być mylące (na dużych zbiorach danych wszystko wychodzi istotne statystycznie. Dlatego też w analizach DIF warto zwrócić uwagę na bardziej praktyczną miarę - czy efekt ten choć istotny statystycznie jest duży czy mały. 
+
+W pakiecie 'mirt' domyślnie zaimplementowane sa inne miary wielkości efektu, z funkcji liczącej IRT P-DIF korzystamy dzięki uprzejmości Tomka Żółtaka. 
+
+Dla przypomnienia klasyfikacja miar wielkości efektu:
+Miary wielkości efektu DIF wyrażone są na skali łatwości zadania (Monahan i in., 2007): 
+• Kategoria A– gdy test weryfikujący statystyczną istotność DIF dał wynik negatywny, lub gdy wynik testu jest pozytywny, ale absolutna wartość P-DIF jest mniejsza od 0,05; 
+• Kategoria B – gdy DIF jest statystycznie istotne oraz absolutna wartość P-DIF znajduje się w przedziale od 0,05 do 0,1; 
+• Kategoria C – gdy DIF jest statystycznie istotne oraz absolutna wartość P-DIF wykracza poza przedział (0,1).
+
+```{r eval = TRUE, comment="", prompt=TRUE, collapse=TRUE}
+
+PDIF = function(x, grOgniskowa, emp = TRUE) {
+  stopifnot("MultipleGroupClass" %in% class(x),
+            is.vector(grOgniskowa), is.vector(emp))
+  stopifnot(x@Data$ngroups == 2,
+            is.character(grOgniskowa) | is.numeric(grOgniskowa),
+            length(grOgniskowa) == 1, length(emp) == 1,
+            all(emp) %in% c(TRUE, FALSE))
+  if (is.numeric(grOgniskowa)) {
+    stopifnot(grOgniskowa %in% 1:2)
+  } else {
+    stopifnot(grOgniskowa %in% x@Data$groupNames)
+    grOgniskowa = which(x@Data$groupNames == grOgniskowa)
+  }
+  grOdniesienia = setdiff(1:2, grOgniskowa)
+  if (emp) {
+    theta = fscores(x, "EAP")[as.numeric(x@Data$group) %in% grOgniskowa]
+  } else {
+    mCov = coef(x, simplify = TRUE)[[grOgniskowa]]$cov
+    mCov[upper.tri(mCov)] = t(mCov)[upper.tri(mCov)]
+    theta = rmvnorm(10^5, coef(x, simplify = TRUE)[[grOgniskowa]]$means, mCov)
+  }
+
+  pdif = as.numeric(rep(NA, x@Data$nitems))
+  for (i in 1:length(pdif)) {
+    pdif[i] = mean(expected.item(extract.item(x, i, grOgniskowa), theta)) -
+      mean(expected.item(extract.item(x, i, grOdniesienia), theta))
+  }
+  return(pdif)
+}
+
+PDIF(mg_configural, "m")
+```
+
+Ćwiczenie 5: Prosimy o zinterpretowanie wielkości efektów dla zadań zidentyfikowanych wcześniej jako posiadające DIF. Ile zadań można zaklasyfikować do kategorii A, B i C. Które to sa zadania? 

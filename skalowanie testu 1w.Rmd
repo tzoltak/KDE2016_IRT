@@ -159,8 +159,8 @@ legend("topright", legend = c("2PL", "Rasch"), col = 1:2, lwd = 1:2)
 Ilość informacji możemy też przeliczyć na wielkość standardowego błędu pomiaru (CSEM).
 
 ```{r comment="", prompt=TRUE, collapse=TRUE}
-csemBZ2PL = 1 / infoBZ2PL
-csemBZRasch = 1 / infoBZRasch
+csemBZ2PL = 1 / infoBZ2PL^0.5
+csemBZRasch = 1 / infoBZRasch^0.5
 plot(xCm, csemBZ2PL, type = "l", main = "Standardowy błąd pomiaru",
      xlab = "wzrost [cm]", ylab = "std. błąd pomiaru [cm]",
      ylim = c(0, 5))
